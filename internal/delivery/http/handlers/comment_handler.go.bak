@@ -1,0 +1,64 @@
+package handlers
+
+import (
+	"encoding/json"
+	"net/http"
+	"strconv"
+
+	"github.com/Anwayyyka/ruvoice-backend/internal/delivery/http/middleware"
+	"github.com/Anwayyyka/ruvoice-backend/internal/domain"
+	"github.com/Anwayyyka/ruvoice-backend/internal/service"
+	"github.com/go-chi/chi/v5"
+)
+
+type CommentHandler struct {
+	commentService *service.CommentService // нужно создать
+}
+
+func NewCommentHandler(commentService *service.CommentService) *CommentHandler {
+	return &CommentHandler{commentService: commentService}
+}
+
+func (h *CommentHandler) GetByTrack(w http.ResponseWriter, r *http.Request) {
+	trackIDStr := chi.URLParam(r, "trackId")
+	trackID, err := strconv.Atoi(trackIDStr)
+	if err != nil {
+		http.Error(w, "Invalid track ID", http.StatusBadRequest)
+		return
+	}
+	comments, err := h.commentService.GetByTrack(r.Context(), trackID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(comments)
+}
+
+func (h *CommentHandler) Create(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(middleware.UserIDKey).(int)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		TrackID int    `json:"track_id"`
+		Text    string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	comment := &domain.Comment{
+		UserID:  userID,
+		TrackID: req.TrackID,
+		Text:    req.Text,
+	}
+	err := h.commentService.Create(r.Context(), comment)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(comment)
+}
