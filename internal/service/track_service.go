@@ -99,9 +99,9 @@ func (s *TrackService) GetPending(ctx context.Context) ([]*domain.Track, error) 
 }
 
 func (s *TrackService) Approve(ctx context.Context, trackID int) error {
-	return s.trackRepo.Approve(ctx, trackID)
+	return s.trackRepo.UpdateStatus(ctx, trackID, "approved")
 }
 
 func (s *TrackService) Reject(ctx context.Context, trackID int, reason string) error {
-	return s.trackRepo.Reject(ctx, trackID, reason)
+	return s.trackRepo.UpdateStatus(ctx, trackID, "rejected")
 }

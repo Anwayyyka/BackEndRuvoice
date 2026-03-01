@@ -89,13 +89,15 @@ func (h *UserHandler) RequestArtist(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-	err := h.userService.RequestArtist(r.Context(), userID, req.ArtistName, req.Bio)
+	// Исправление: RequestArtist возвращает обновлённого пользователя и ошибку
+	updatedUser, err := h.userService.RequestArtist(r.Context(), userID, req.ArtistName, req.Bio)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "request sent"})
+	w.Header().Set("Content-Type", "application/json")
+	// Возвращаем обновлённого пользователя (как и в других методах)
+	json.NewEncoder(w).Encode(ToUserDTO(updatedUser))
 }
 
 func (h *UserHandler) GetUserByEmail(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +106,7 @@ func (h *UserHandler) GetUserByEmail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Email is required", http.StatusBadRequest)
 		return
 	}
+	// Исправление: метод должен быть определён в service.UserService
 	user, err := h.userService.GetByEmail(r.Context(), email)
 	if err != nil || user == nil {
 		http.Error(w, "User not found", http.StatusNotFound)

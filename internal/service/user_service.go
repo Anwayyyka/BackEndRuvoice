@@ -1,3 +1,4 @@
+// internal/service/user_service.go
 package service
 
 import (
@@ -9,6 +10,7 @@ import (
 	"github.com/Anwayyyka/ruvoice-backend/internal/pkg/hash"
 	"github.com/Anwayyyka/ruvoice-backend/internal/pkg/jwt"
 	"github.com/Anwayyyka/ruvoice-backend/internal/repository"
+	"github.com/jackc/pgx/v5"
 )
 
 type UserService struct {
@@ -30,7 +32,10 @@ type RegisterInput struct {
 }
 
 func (s *UserService) Register(ctx context.Context, input RegisterInput) (*domain.User, string, error) {
-	existing, _ := s.repo.GetByEmail(ctx, input.Email)
+	existing, err := s.repo.GetByEmail(ctx, input.Email)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, "", err
+	}
 	if existing != nil {
 		return nil, "", errors.New("Пользователь с таким email уже существует")
 	}
@@ -86,18 +91,15 @@ func (s *UserService) GetProfile(ctx context.Context, userID int) (*domain.User,
 	}
 	return user, nil
 }
+
 func (s *UserService) UpdateProfile(ctx context.Context, userID int, updates map[string]interface{}) (*domain.User, error) {
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil || user == nil {
-		return nil, errors.New("user not found")
+		return nil, errors.New("Пользователь не найден")
 	}
 
-	// Применяем изменения
 	if name, ok := updates["full_name"].(string); ok {
 		user.FullName = &name
-	}
-	if artistName, ok := updates["artist_name"].(string); ok {
-		user.ArtistName = &artistName
 	}
 	if bio, ok := updates["bio"].(string); ok {
 		user.Bio = &bio
@@ -120,37 +122,34 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID int, updates map
 	if website, ok := updates["website"].(string); ok {
 		user.Website = &website
 	}
-	if requested, ok := updates["artist_requested"].(bool); ok {
-		user.ArtistRequested = requested
-	}
 
 	err = s.repo.Update(ctx, user)
-	return user, err
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
-func (s *UserService) RequestArtist(ctx context.Context, userID int, artistName, bio string) error {
+func (s *UserService) RequestArtist(ctx context.Context, userID int, artistName, bio string) (*domain.User, error) {
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil || user == nil {
-		return errors.New("Пользователь не найден")
+		return nil, errors.New("Пользователь не найден")
 	}
 	user.ArtistName = &artistName
 	user.Bio = &bio
-	// Обновляем имя артиста и био
-	if err := s.repo.Update(ctx, user); err != nil {
-		return err
-	}
-	// Меняем роль на artist
-	return s.repo.UpdateRole(ctx, userID, "artist")
-}
+	user.Role = "artist"
 
-func (s *UserService) ApproveArtist(ctx context.Context, userID int) error {
-	return s.repo.UpdateRole(ctx, userID, "artist")
+	err = s.repo.Update(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 func (s *UserService) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	user, err := s.repo.GetByEmail(ctx, email)
-	if err != nil || user == nil {
-		return nil, errors.New("user not found")
+	if err != nil {
+		return nil, err
 	}
 	return user, nil
 }

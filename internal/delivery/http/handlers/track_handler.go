@@ -25,7 +25,7 @@ func NewTrackHandler(trackService *service.TrackService, userService *service.Us
 func (h *TrackHandler) ListApproved(w http.ResponseWriter, r *http.Request) {
 	tracks, err := h.trackService.GetApproved(r.Context())
 	if err != nil {
-		log.Printf("ERROR in ListApproved: %v", err) // теперь ошибка появится в терминале
+		log.Printf("ERROR in ListApproved: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -117,11 +117,14 @@ func (h *TrackHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// ⚠️ ВАЖНО: убедитесь, что структура domain.Track содержит поля ArtistName и GenreID.
+	// Если они называются иначе (например, ArtistName → ArtistName, GenreID → GenreID),
+	// скорректируйте имена ниже.
 	track := &domain.Track{
 		Title:       title,
 		ArtistID:    userID,
-		ArtistName:  artistName,
-		GenreID:     genreID,
+		ArtistName:  artistName, // должно быть публичным полем
+		GenreID:     genreID,    // должно быть публичным полем
 		CoverURL:    coverURL,
 		AudioURL:    audioURL,
 		Description: &description,

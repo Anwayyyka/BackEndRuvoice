@@ -19,16 +19,8 @@ func NewLikeRepository(db *pgxpool.Pool) *LikeRepository {
 
 func (r *LikeRepository) Create(ctx context.Context, userID, trackID int) (*domain.Like, error) {
 	var like domain.Like
-	query := `
-		INSERT INTO likes (user_id, track_id)
-		VALUES ($1, $2)
-		ON CONFLICT (user_id, track_id) DO NOTHING
-		RETURNING id, user_id, track_id, created_at
-	`
+	query := `INSERT INTO likes (user_id, track_id) VALUES ($1, $2) RETURNING id, user_id, track_id, created_at`
 	err := r.db.QueryRow(ctx, query, userID, trackID).Scan(&like.ID, &like.UserID, &like.TrackID, &like.CreatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
 	if err != nil {
 		return nil, err
 	}

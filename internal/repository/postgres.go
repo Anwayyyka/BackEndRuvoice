@@ -21,7 +21,7 @@ func NewPostgresDB(cfg *config.Config) (*pgxpool.Pool, error) {
 	if err := pool.Ping(context.Background()); err != nil {
 		return nil, fmt.Errorf("database ping failed: %w", err)
 	}
-
+	log.Printf("Connected to database: %s", cfg.DBName)
 	log.Println("Connected to database")
 	return pool, nil
 }

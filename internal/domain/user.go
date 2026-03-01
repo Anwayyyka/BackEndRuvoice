@@ -7,7 +7,8 @@ type User struct {
 	Email           string    `json:"email"`
 	PasswordHash    string    `json:"-"`
 	FullName        *string   `json:"full_name,omitempty"`
-	ArtistName      *string   `json:"artist_name,omitempty"` // добавлено
+	Nickname        *string   `json:"nickname,omitempty"`
+	ArtistName      *string   `json:"artist_name,omitempty"`
 	Role            string    `json:"role"`
 	AvatarURL       *string   `json:"avatar_url,omitempty"`
 	BannerURL       *string   `json:"banner_url,omitempty"`
