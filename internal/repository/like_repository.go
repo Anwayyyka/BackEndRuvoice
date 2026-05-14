@@ -19,11 +19,22 @@ func NewLikeRepository(db *pgxpool.Pool) *LikeRepository {
 
 func (r *LikeRepository) Create(ctx context.Context, userID, trackID int) (*domain.Like, error) {
 	var like domain.Like
-	query := `INSERT INTO likes (user_id, track_id) VALUES ($1, $2) RETURNING id, user_id, track_id, created_at`
-	err := r.db.QueryRow(ctx, query, userID, trackID).Scan(&like.ID, &like.UserID, &like.TrackID, &like.CreatedAt)
+	query := `
+		INSERT INTO likes (user_id, track_id)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id, track_id) DO NOTHING
+		RETURNING id, user_id, track_id, created_at
+	`
+	err := r.db.QueryRow(ctx, query, userID, trackID).
+		Scan(&like.ID, &like.UserID, &like.TrackID, &like.CreatedAt)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	return &like, nil
 }
 
@@ -36,11 +47,17 @@ func (r *LikeRepository) Delete(ctx context.Context, userID, trackID int) error 
 func (r *LikeRepository) GetByUserAndTrack(ctx context.Context, userID, trackID int) (*domain.Like, error) {
 	var like domain.Like
 	query := `SELECT id, user_id, track_id, created_at FROM likes WHERE user_id = $1 AND track_id = $2`
-	err := r.db.QueryRow(ctx, query, userID, trackID).Scan(&like.ID, &like.UserID, &like.TrackID, &like.CreatedAt)
+	err := r.db.QueryRow(ctx, query, userID, trackID).
+		Scan(&like.ID, &like.UserID, &like.TrackID, &like.CreatedAt)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
-	return &like, err
+	if err != nil {
+		return nil, err
+	}
+
+	return &like, nil
 }
 
 func (r *LikeRepository) CountByTrack(ctx context.Context, trackID int) (int, error) {

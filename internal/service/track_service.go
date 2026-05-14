@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/Anwayyyka/ruvoice-backend/internal/domain"
 	"github.com/Anwayyyka/ruvoice-backend/internal/repository"
@@ -45,11 +46,49 @@ func (s *TrackService) GetByID(ctx context.Context, id int) (*domain.Track, erro
 	return s.trackRepo.GetByID(ctx, id)
 }
 
+func (s *TrackService) GetTracksByIDs(ctx context.Context, ids []int) ([]*domain.Track, error) {
+	return s.trackRepo.GetByIDs(ctx, ids)
+}
+
+func (s *TrackService) GetOrCreateExternalTrack(ctx context.Context, source string, externalID int, trackData *domain.Track) (*domain.Track, error) {
+	existing, err := s.trackRepo.GetByExternal(ctx, source, externalID)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return existing, nil
+	}
+	trackData.ExternalID = &externalID
+	trackData.ExternalSource = &source
+	trackData.IsExternal = true
+	if err := s.trackRepo.Create(ctx, trackData); err != nil {
+		return nil, err
+	}
+	return trackData, nil
+}
+
+func (s *TrackService) ensureApprovedTrack(ctx context.Context, trackID int) error {
+	track, err := s.trackRepo.GetByID(ctx, trackID)
+	if err != nil {
+		return err
+	}
+	if track == nil {
+		return errors.New("track not found")
+	}
+	return nil
+}
+
 func (s *TrackService) IncrementPlays(ctx context.Context, trackID int) error {
+	if err := s.ensureApprovedTrack(ctx, trackID); err != nil {
+		return err
+	}
 	return s.trackRepo.IncrementPlays(ctx, trackID)
 }
 
 func (s *TrackService) Like(ctx context.Context, userID, trackID int) error {
+	if err := s.ensureApprovedTrack(ctx, trackID); err != nil {
+		return err
+	}
 	like, err := s.likeRepo.Create(ctx, userID, trackID)
 	if err != nil {
 		return err
@@ -68,20 +107,22 @@ func (s *TrackService) Unlike(ctx context.Context, userID, trackID int) error {
 	if like == nil {
 		return errors.New("like not found")
 	}
-	err = s.likeRepo.Delete(ctx, userID, trackID)
-	if err != nil {
+	if err := s.likeRepo.Delete(ctx, userID, trackID); err != nil {
 		return err
 	}
 	return s.trackRepo.UpdateLikesCount(ctx, trackID, -1)
 }
 
 func (s *TrackService) AddFavorite(ctx context.Context, userID, trackID int) error {
+	if err := s.ensureApprovedTrack(ctx, trackID); err != nil {
+		return err
+	}
 	fav, err := s.favRepo.Create(ctx, userID, trackID)
 	if err != nil {
 		return err
 	}
 	if fav == nil {
-		return errors.New("already in favorites")
+		return nil // уже в избранном
 	}
 	return nil
 }
@@ -103,5 +144,8 @@ func (s *TrackService) Approve(ctx context.Context, trackID int) error {
 }
 
 func (s *TrackService) Reject(ctx context.Context, trackID int, reason string) error {
+	if strings.TrimSpace(reason) == "" {
+		return errors.New("reason is required")
+	}
 	return s.trackRepo.UpdateStatus(ctx, trackID, "rejected")
 }

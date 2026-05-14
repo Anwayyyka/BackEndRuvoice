@@ -28,12 +28,12 @@ func (r *CommentRepository) Create(ctx context.Context, comment *domain.Comment)
 
 func (r *CommentRepository) GetByTrack(ctx context.Context, trackID int) ([]*domain.Comment, error) {
 	query := `
-		SELECT c.id, c.user_id, c.track_id, c.text, c.created_at, c.updated_at, u.full_name
-		FROM comments c
-		JOIN users u ON c.user_id = u.id
-		WHERE c.track_id = $1
-		ORDER BY c.created_at DESC
+		SELECT id, user_id, track_id, text, created_at, updated_at
+		FROM comments
+		WHERE track_id = $1
+		ORDER BY created_at DESC
 	`
+
 	rows, err := r.db.Query(ctx, query, trackID)
 	if err != nil {
 		return nil, err
@@ -43,13 +43,15 @@ func (r *CommentRepository) GetByTrack(ctx context.Context, trackID int) ([]*dom
 	var comments []*domain.Comment
 	for rows.Next() {
 		var c domain.Comment
-		var userName string
-		err := rows.Scan(&c.ID, &c.UserID, &c.TrackID, &c.Text, &c.CreatedAt, &c.UpdatedAt, &userName)
-		if err != nil {
+		if err := rows.Scan(&c.ID, &c.UserID, &c.TrackID, &c.Text, &c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, err
 		}
-		// можно добавить поле UserName в домен, если нужно, но пока оставим так
 		comments = append(comments, &c)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return comments, nil
 }

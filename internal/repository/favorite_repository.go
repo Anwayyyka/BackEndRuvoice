@@ -1,3 +1,4 @@
+// internal/repository/favorite_repository.go
 package repository
 
 import (
@@ -18,16 +19,16 @@ func NewFavoriteRepository(db *pgxpool.Pool) *FavoriteRepository {
 }
 
 func (r *FavoriteRepository) Create(ctx context.Context, userID, trackID int) (*domain.Favorite, error) {
-	var fav domain.Favorite
 	query := `
-		INSERT INTO favorites (user_id, track_id)
-		VALUES ($1, $2)
+		INSERT INTO favorites (user_id, track_id, created_at)
+		VALUES ($1, $2, NOW())
 		ON CONFLICT (user_id, track_id) DO NOTHING
-		RETURNING id, user_id, track_id, created_at
+		RETURNING user_id, track_id, created_at
 	`
-	err := r.db.QueryRow(ctx, query, userID, trackID).Scan(&fav.ID, &fav.UserID, &fav.TrackID, &fav.CreatedAt)
+	var fav domain.Favorite
+	err := r.db.QueryRow(ctx, query, userID, trackID).Scan(&fav.UserID, &fav.TrackID, &fav.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, nil // уже существует
 	}
 	if err != nil {
 		return nil, err
@@ -42,7 +43,7 @@ func (r *FavoriteRepository) Delete(ctx context.Context, userID, trackID int) er
 }
 
 func (r *FavoriteRepository) GetByUser(ctx context.Context, userID int) ([]*domain.Favorite, error) {
-	query := `SELECT id, user_id, track_id, created_at FROM favorites WHERE user_id = $1 ORDER BY created_at DESC`
+	query := `SELECT user_id, track_id, created_at FROM favorites WHERE user_id = $1 ORDER BY created_at DESC`
 	rows, err := r.db.Query(ctx, query, userID)
 	if err != nil {
 		return nil, err
@@ -52,11 +53,16 @@ func (r *FavoriteRepository) GetByUser(ctx context.Context, userID int) ([]*doma
 	var favs []*domain.Favorite
 	for rows.Next() {
 		var f domain.Favorite
-		err := rows.Scan(&f.ID, &f.UserID, &f.TrackID, &f.CreatedAt)
+		err := rows.Scan(&f.UserID, &f.TrackID, &f.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
 		favs = append(favs, &f)
 	}
 	return favs, nil
+}
+
+// GetUserFavorites – алиас для совместимости
+func (r *FavoriteRepository) GetUserFavorites(ctx context.Context, userID int) ([]*domain.Favorite, error) {
+	return r.GetByUser(ctx, userID)
 }

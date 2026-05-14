@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/Anwayyyka/ruvoice-backend/internal/delivery/http/middleware"
 	"github.com/Anwayyyka/ruvoice-backend/internal/service"
@@ -34,11 +35,13 @@ func (h *UserHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+
 	var req updateProfileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
+
 	updates := make(map[string]interface{})
 	if req.FullName != nil {
 		updates["full_name"] = *req.FullName
@@ -64,11 +67,13 @@ func (h *UserHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	if req.Website != nil {
 		updates["website"] = *req.Website
 	}
+
 	user, err := h.userService.UpdateProfile(r.Context(), userID, updates)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ToUserDTO(user))
 }
@@ -84,19 +89,24 @@ func (h *UserHandler) RequestArtist(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+
 	var req requestArtistRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-	// Исправление: RequestArtist возвращает обновлённого пользователя и ошибку
+
 	updatedUser, err := h.userService.RequestArtist(r.Context(), userID, req.ArtistName, req.Bio)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "уже") {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
-	// Возвращаем обновлённого пользователя (как и в других методах)
 	json.NewEncoder(w).Encode(ToUserDTO(updatedUser))
 }
 
@@ -106,12 +116,13 @@ func (h *UserHandler) GetUserByEmail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Email is required", http.StatusBadRequest)
 		return
 	}
-	// Исправление: метод должен быть определён в service.UserService
+
 	user, err := h.userService.GetByEmail(r.Context(), email)
 	if err != nil || user == nil {
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ToUserDTO(user))
 }

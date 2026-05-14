@@ -30,15 +30,17 @@ func main() {
 
 	// Репозитории
 	userRepo := repository.NewUserRepository(db)
+	artistRequestRepo := repository.NewArtistRequestRepository(db)
 	trackRepo := repository.NewTrackRepository(db)
 	likeRepo := repository.NewLikeRepository(db)
 	favRepo := repository.NewFavoriteRepository(db)
 
 	// Сервисы
-	userService := service.NewUserService(userRepo, cfg.JWTSecret)
+	userService := service.NewUserService(userRepo, artistRequestRepo, cfg.JWTSecret)
 	trackService := service.NewTrackService(trackRepo, userRepo, likeRepo, favRepo)
 
 	// Хендлеры
+	jamendoHandler := handlers.NewJamendoHandler(trackService)
 	authHandler := handlers.NewAuthHandler(userService)
 	userHandler := handlers.NewUserHandler(userService)
 	trackHandler := handlers.NewTrackHandler(trackService, userService)
@@ -67,8 +69,10 @@ func main() {
 	r.Get("/api/tracks/{id}", trackHandler.GetByID)
 	r.Get("/api/users/by-email/{email}", userHandler.GetUserByEmail)
 	r.Get("/api/artists/{artistId}/tracks", trackHandler.GetByArtist)
+	// Jamendo прокси (добавить эту строку)
+	r.Get("/api/jamendo/tracks", jamendoHandler.GetTracks)
 
-	// Защищённые маршруты (требуют JWT)
+	// Защищённые маршруты
 	r.Group(func(r chi.Router) {
 		r.Use(authmiddleware.AuthMiddleware(cfg.JWTSecret))
 
@@ -76,7 +80,7 @@ func main() {
 		r.Put("/api/profile", userHandler.UpdateProfile)
 		r.Post("/api/profile/artist-request", userHandler.RequestArtist)
 
-		// Треки (загрузка требует роль artist или admin)
+		// Треки
 		r.With(authmiddleware.ArtistMiddleware).Post("/api/tracks", trackHandler.Create)
 
 		// Лайки и избранное
@@ -88,7 +92,7 @@ func main() {
 		r.Get("/api/favorites", trackHandler.GetUserFavorites)
 	})
 
-	// Админские маршруты (модерация)
+	// Админские маршруты
 	r.Group(func(r chi.Router) {
 		r.Use(authmiddleware.AuthMiddleware(cfg.JWTSecret))
 		r.Use(authmiddleware.AdminMiddleware)
@@ -122,6 +126,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown:", err)
 	}

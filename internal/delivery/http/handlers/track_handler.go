@@ -117,14 +117,11 @@ func (h *TrackHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// ⚠️ ВАЖНО: убедитесь, что структура domain.Track содержит поля ArtistName и GenreID.
-	// Если они называются иначе (например, ArtistName → ArtistName, GenreID → GenreID),
-	// скорректируйте имена ниже.
 	track := &domain.Track{
 		Title:       title,
-		ArtistID:    userID,
-		ArtistName:  artistName, // должно быть публичным полем
-		GenreID:     genreID,    // должно быть публичным полем
+		ArtistID:    &userID,
+		ArtistName:  artistName,
+		GenreID:     genreID,
 		CoverURL:    coverURL,
 		AudioURL:    audioURL,
 		Description: &description,
@@ -153,7 +150,9 @@ func (h *TrackHandler) Play(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (h *TrackHandler) Like(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +172,9 @@ func (h *TrackHandler) Like(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "liked"})
 }
 
 func (h *TrackHandler) Unlike(w http.ResponseWriter, r *http.Request) {
@@ -193,7 +194,9 @@ func (h *TrackHandler) Unlike(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "unliked"})
 }
 
 func (h *TrackHandler) AddFavorite(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +216,12 @@ func (h *TrackHandler) AddFavorite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"track_id": trackID,
+		"status":   "added",
+	})
 }
 
 func (h *TrackHandler) RemoveFavorite(w http.ResponseWriter, r *http.Request) {
@@ -233,7 +241,9 @@ func (h *TrackHandler) RemoveFavorite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "removed"})
 }
 
 func (h *TrackHandler) GetUserFavorites(w http.ResponseWriter, r *http.Request) {
@@ -244,9 +254,25 @@ func (h *TrackHandler) GetUserFavorites(w http.ResponseWriter, r *http.Request) 
 	}
 	favs, err := h.trackService.GetUserFavorites(r.Context(), userID)
 	if err != nil {
+		log.Printf("GetUserFavorites service error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(favs) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]*domain.Track{})
+		return
+	}
+	trackIDs := make([]int, len(favs))
+	for i, f := range favs {
+		trackIDs[i] = f.TrackID
+	}
+	tracks, err := h.trackService.GetTracksByIDs(r.Context(), trackIDs)
+	if err != nil {
+		log.Printf("GetTracksByIDs error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(favs)
+	json.NewEncoder(w).Encode(tracks)
 }

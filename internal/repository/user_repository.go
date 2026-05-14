@@ -1,4 +1,3 @@
-// internal/repository/user_repository.go
 package repository
 
 import (
@@ -18,28 +17,13 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
-	query := `
-		INSERT INTO users (email, password_hash, full_name, role)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, created_at, updated_at
-	`
-	err := r.db.QueryRow(ctx, query,
-		user.Email, user.PasswordHash, user.FullName, user.Role,
-	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
-	return err
+type userScanner interface {
+	Scan(dest ...any) error
 }
 
-func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
-	query := `
-		SELECT id, email, password_hash, full_name, artist_name, role,
-		       avatar_url, banner_url, bio,
-		       telegram, vk, youtube, website, artist_requested,
-		       created_at, updated_at
-		FROM users WHERE email = $1
-	`
+func scanUser(scanner userScanner) (*domain.User, error) {
 	user := &domain.User{}
-	err := r.db.QueryRow(ctx, query, email).Scan(
+	err := scanner.Scan(
 		&user.ID,
 		&user.Email,
 		&user.PasswordHash,
@@ -58,9 +42,35 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 		&user.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, pgx.ErrNoRows
-		}
+		return nil, err
+	}
+	return user, nil
+}
+
+func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
+	query := `
+		INSERT INTO users (email, password_hash, full_name, role)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at, updated_at
+	`
+	return r.db.QueryRow(ctx, query,
+		user.Email, user.PasswordHash, user.FullName, user.Role,
+	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+}
+
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
+	query := `
+		SELECT id, email, password_hash, full_name, artist_name, role,
+		       avatar_url, banner_url, bio,
+		       telegram, vk, youtube, website, artist_requested,
+		       created_at, updated_at
+		FROM users WHERE email = $1
+	`
+	user, err := scanUser(r.db.QueryRow(ctx, query, email))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -74,29 +84,11 @@ func (r *UserRepository) GetByID(ctx context.Context, id int) (*domain.User, err
 		       created_at, updated_at
 		FROM users WHERE id = $1
 	`
-	user := &domain.User{}
-	err := r.db.QueryRow(ctx, query, id).Scan(
-		&user.ID,
-		&user.Email,
-		&user.PasswordHash,
-		&user.FullName,
-		&user.ArtistName,
-		&user.Role,
-		&user.AvatarURL,
-		&user.BannerURL,
-		&user.Bio,
-		&user.Telegram,
-		&user.Vk,
-		&user.Youtube,
-		&user.Website,
-		&user.ArtistRequested,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	)
+	user, err := scanUser(r.db.QueryRow(ctx, query, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
 		return nil, err
 	}
 	return user, nil
@@ -114,8 +106,6 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 			vk = COALESCE($8, vk),
 			youtube = COALESCE($9, youtube),
 			website = COALESCE($10, website),
-			artist_requested = $11,
-			role = COALESCE($12, role),
 			updated_at = NOW()
 		WHERE id = $1
 	`
@@ -130,9 +120,13 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 		user.Vk,
 		user.Youtube,
 		user.Website,
-		user.ArtistRequested,
-		user.Role,
 	)
+	return err
+}
+
+func (r *UserRepository) SetArtistRequested(ctx context.Context, userID int, requested bool) error {
+	query := `UPDATE users SET artist_requested = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.db.Exec(ctx, query, requested, userID)
 	return err
 }
 
